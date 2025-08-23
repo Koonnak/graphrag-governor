@@ -1,54 +1,54 @@
-# GraphRAG‑Governor — Architecture
+# GraphRAG‑Governor — Architecture 🧭
 
-> **Audience:** Non‑technical leaders *and* technical stakeholders. This document provides a high‑level narrative first, then a deep technical breakdown with precise component responsibilities and interfaces.
+> **Audience:** Non‑technical leaders *and* technical stakeholders. This document offers a clear narrative first, then a deep technical breakdown with precise responsibilities and interfaces.
 
 ---
 
-## 1) Executive Summary (Non‑Technical)
+## 1) Executive Summary (Non‑Technical) 🎯
 
-**What this system does.** GraphRAG‑Governor is a command center for AI answers over your documents. It retrieves evidence from your content, drafts an answer, and monitors quality, speed, and cost. You can A/B test retrieval strategies to pick the best configuration. Privacy is baked in via PII masking; operations are visible via dashboards.
+**What this system does.** GraphRAG‑Governor is a **command center** for AI answers over your documents. It retrieves evidence from your content, drafts an answer, and monitors **quality**, **speed**, and **cost**. You can **A/B test** retrieval strategies to pick the best configuration. Privacy is built‑in via **PII masking**; operations are visible via **dashboards**.
 
 **Why it matters.**
 
-* **Trust:** Fewer hallucinations through better retrieval and continuous evaluation.
-* **Efficiency:** Monitors latency and (optionally) token cost to control spend.
-* **Compliance:** GDPR‑aware defaults (PII redaction, minimal logging); runs are auditable.
-* **Operability:** Clear health checks, metrics, and traces; one‑click local environment.
+* **Trust 🔒:** Fewer hallucinations through stronger retrieval and continuous evaluation.
+* **Efficiency ⚡:** Monitors latency and (optionally) token cost to control spend.
+* **Compliance 🛡️:** GDPR‑aware defaults (PII redaction, minimal logging); runs are auditable.
+* **Operability 🧭:** Clear health checks, metrics, and traces; one‑click local environment.
 
-**What it is not.** A final business UI. It’s a production‑style *control plane* and API foundation you can connect to your own apps and data pipelines.
+**What it is not.** A final business UI. It’s a production‑style **control plane** and API foundation you can connect to your own apps and data pipelines.
 
 ---
 
-## 2) System Overview (Technical)
+## 2) System Overview (Technical) 🧩
 
 **Core services (docker‑compose)**
 
-* **API (FastAPI + Gunicorn/Uvicorn):** `/query`, `/health`, OpenAPI docs. Stateless.
-* **Retrieval Engines (in‑process):**
+* **API 🌐 (FastAPI + Gunicorn/Uvicorn):** `/query`, `/health`, OpenAPI docs. Stateless.
+* **Retrieval Engines 🔎 (in‑process):**
 
   * **Variant A:** BM25 (lexical retrieval via `rank‑bm25`).
-  * **Variant B:** Dense retrieval (Sentence‑Transformers `all‑MiniLM‑L6‑v2`) + FAISS IP index.
-* **Generator (pluggable):** Demo composer by default; swap with OpenAI/Azure/HF/LiteLLM.
-* **Guardrails:** Pre/post PII masking; hooks for LLM‑as‑judge/policy.
-* **Knowledge Graph:** Neo4j (minimal `(:Document {id,title})` schema) + RDF export (RDFLib).
-* **Observability:** OpenTelemetry SDK → OTel Collector → Jaeger (traces), Prometheus (metrics) → Grafana.
-* **Evaluation:** RAGAS metrics and MLflow tracking (experiments/runs/artifacts).
+  * **Variant B:** Dense retrieval (Sentence‑Transformers `all‑MiniLM‑L6‑v2`) + **FAISS** IP index.
+* **Generator ✍️🤖 (pluggable):** Demo composer by default; swap with OpenAI/Azure/HF/LiteLLM.
+* **Guardrails 🧱🛡️:** Pre/post PII masking; hooks for LLM‑as‑judge/policy.
+* **Knowledge Graph 🕸️:** Neo4j (minimal `(:Document {id,title})` schema) + RDF export (RDFLib).
+* **Observability 📈:** OpenTelemetry SDK → OTel Collector → Jaeger (traces), Prometheus (metrics) → Grafana.
+* **Evaluation 🧪:** RAGAS metrics and MLflow tracking (experiments/runs/artifacts).
 
 **External interfaces**
 
-* **Northbound:** HTTP/JSON clients (apps, Postman, curl), Grafana, MLflow UI, Jaeger, Neo4j Browser.
-* **Southbound:** Optional LLM provider, object stores or vector DBs (future), identity providers (OIDC, future).
+* **Northbound ⬆️:** HTTP/JSON clients (apps, Postman, curl), Grafana, MLflow UI, Jaeger, Neo4j Browser.
+* **Southbound ⬇️:** Optional LLM provider, object stores or vector DBs (future), identity providers (OIDC, future).
 
 ---
 
-## 3) Logical Architecture Diagram
+## 3) Logical Architecture Diagram 🗺️
 
 ```
 [ Client / UI ]
       |
       v
-[ FastAPI API ] --(OTel SDK)--> [ OTel Collector ] --> [ Jaeger ] (traces)
-      |                                          \--> [ Prometheus ] --> [ Grafana ] (metrics)
+[ FastAPI API ] --(OTel SDK)--> [ OTel Collector ] --> [ Jaeger ] (traces 🧵)
+      |                                          \--> [ Prometheus ] --> [ Grafana ] (metrics 📊)
       v
 [ RAG Pipeline ] -----> [ Guardrails (PII, policy, LLM‑judge hooks) ]
    |      \
@@ -63,7 +63,7 @@
 
 ---
 
-## 4) Request Lifecycle (Sequence)
+## 4) Request Lifecycle (Sequence) 🔁
 
 ```
 Client -> API(POST /query?variant=A|B&k=N)
@@ -76,43 +76,43 @@ API -> Telemetry (latency, counters, spans)
 API -> Client (JSON: answer, variant, k, hits, latency_ms)
 ```
 
-**Traced spans:** `http_query` → `retrieve` → `gather_contexts` → `generate`.
-**Metrics:** `rag_requests_total` (Counter), `rag_latency_ms` (Histogram).
+**Traced spans 🎯:** `http_query` → `retrieve` → `gather_contexts` → `generate`
+**Metrics 📊:** `rag_requests_total` (Counter), `rag_latency_ms` (Histogram)
 
 ---
 
-## 5) Data Model & Storage
+## 5) Data Model & Storage 📚
 
 **Documents (demo):**
 
-* Files: `data/sample_docs/*.md` (seed content).
-* Vector embeddings: computed from Sentence‑Transformers; in‑memory FAISS IP index.
-* Lexical index: BM25 token arrays (in‑memory) for fast scoring.
+* Files 📄: `data/sample_docs/*.md` (seed content).
+* Vector embeddings 🧠: computed via Sentence‑Transformers; in‑memory **FAISS** IP index.
+* Lexical index 🔤: BM25 token arrays (in‑memory) for fast scoring.
 
-**Knowledge Graph:**
+**Knowledge Graph 🕸️:**
 
 * Minimal label: `(:Document { id: STRING, title: STRING })`.
 * Extend with relations: `(:Concept)`, `(:Company)`, edges `(:Document)-[:MENTIONS]->(:Concept)`.
-* RDF export: Turtle serialization for triple‑store interoperability.
+* RDF export 📤: Turtle serialization for triple‑store interoperability.
 
-**Evaluation & Telemetry:**
+**Evaluation & Telemetry 📈:**
 
 * **MLflow:** experiments/runs; params (variant, k), metrics (RAGAS), artifacts.
 * **Jaeger/Prometheus:** traces and runtime metrics (latency, throughput, errors).
 
-**PII handling:** input/output masking; redact secrets from logs; avoid raw payloads in traces.
+**PII handling 🔒:** input/output masking; redact secrets from logs; avoid raw payloads in traces.
 
 ---
 
-## 6) Component Responsibilities & Interfaces
+## 6) Component Responsibilities & Interfaces 🔧
 
-* **`src/api`**: request validation, routing, CORS; orchestrates pipeline and telemetry; returns JSON.
-* **`src/pipelines`**: retrieval orchestration and generation call; variant selection; k‑control; timing.
-* **`src/guardrails`**: pre/post enforcement (PII). Extension hooks for policy & LLM‑judge.
-* **`src/obs`**: OTel setup; tracer/meter providers; metric creation.
-* **`src/kg`**: Neo4j client wrapper; RDF export utilities.
-* **`src/eval`**: RAGAS evaluation runner; MLflow logging.
-* **`scripts/`**: utilities (embedding bootstrap, etc.).
+* **`src/api` 🌐:** request validation, routing, CORS; orchestrates pipeline and telemetry; returns JSON.
+* **`src/pipelines` 🔎:** retrieval orchestration and generation call; variant selection; k‑control; timing.
+* **`src/guardrails` 🛡️:** pre/post enforcement (PII). Extension hooks for policy & LLM‑judge.
+* **`src/obs` 📈:** OTel setup; tracer/meter providers; metric creation.
+* **`src/kg` 🕸️:** Neo4j client wrapper; RDF export utilities.
+* **`src/eval` 🧪:** RAGAS evaluation runner; MLflow logging.
+* **`scripts/` 🛠️:** utilities (embedding bootstrap, etc.).
 
 **Key interfaces (selected)**
 
@@ -122,17 +122,17 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 
 ---
 
-## 7) Configuration & Environment
+## 7) Configuration & Environment ⚙️
 
-**Environment variables (see `.env.example`):** `OTEL_EXPORTER_OTLP_ENDPOINT`, `SERVICE_NAME`, `NEO4J_URI`, `MLFLOW_TRACKING_URI`, optional LLM settings.
+**Environment variables:** `OTEL_EXPORTER_OTLP_ENDPOINT`, `SERVICE_NAME`, `NEO4J_URI`, `MLFLOW_TRACKING_URI`, optional LLM settings (see `.env.example`).
 
-**Ports (defaults):** API 8000; Neo4j 7474/7687; MLflow 5000; Jaeger 16686; Prometheus 9090; Grafana 3000; OTel gRPC 4317.
+**Ports 🔌 (defaults):** API `8000`; Neo4j `7474/7687`; MLflow `5000`; Jaeger `16686`; Prometheus `9090`; Grafana `3000`; OTel gRPC `4317`.
 
-**Security (prod guidance):** terminate TLS at ingress; add OIDC SSO + RBAC; restrict UIs (Grafana/MLflow/Neo4j) to private networks.
+**Security 🔐 (prod guidance):** terminate TLS at ingress; add OIDC SSO + RBAC; restrict UIs (Grafana/MLflow/Neo4j) to private networks.
 
 ---
 
-## 8) Non‑Functional Requirements
+## 8) Non‑Functional Requirements 🧱
 
 * **Reliability:** health checks; graceful degradation when OTel or Neo4j are down.
 * **Scalability:** stateless API behind load balancer; horizontal scale; shard/partition indices for large corpora.
@@ -143,19 +143,19 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 
 ---
 
-## 9) Performance & Capacity Planning
+## 9) Performance & Capacity Planning 🚀
 
-* **CPU‑only baseline:** all‑MiniLM‑L6‑v2; FAISS IP; bm25 tokenization; sub‑100ms retrieval for small corpora.
-* **GPU benefits:** faster embedding & cross‑encoder re‑ranking (future); batch offline indexing.
+* **CPU‑only baseline 🖥️:** `all‑MiniLM‑L6‑v2`; FAISS IP; BM25 tokenization; sub‑100ms retrieval for small corpora.
+* **GPU benefits 🧮:** faster embedding & cross‑encoder re‑ranking (future); batch offline indexing.
 * **Scaling patterns:**
 
-  * **Throughput:** N× API replicas (Gunicorn workers) + async I/O for LLM calls.
-  * **Index:** switch to HNSW or a vector DB beyond \~1M passages; pre‑warm caches.
-  * **Caching:** Redis for embeddings/answers; target 30–60% hit ratio.
+  * **Throughput 🚦:** N× API replicas (Gunicorn workers) + async I/O for LLM calls.
+  * **Index 🧭:** switch to HNSW or a vector DB beyond \~1M passages; pre‑warm caches.
+  * **Caching 🗄️:** Redis for embeddings/answers; target 30–60% hit ratio.
 
 ---
 
-## 10) Failure Modes & Fallbacks
+## 10) Failure Modes & Fallbacks 🧯
 
 * **OTel Collector unavailable:** API serves traffic; switches to no‑op telemetry.
 * **Neo4j unavailable:** KG‑specific features degrade; core text retrieval intact.
@@ -164,7 +164,7 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 
 ---
 
-## 11) Extensibility Roadmap
+## 11) Extensibility Roadmap 🗺️
 
 * **Re‑ranking:** cross‑encoder (`ms‑marco‑MiniLM‑L‑6‑v2`) on top‑N; hybrid fusion (lexical + dense).
 * **Async pipeline:** concurrent retrieval/LLM; streaming responses (server‑sent events).
@@ -174,7 +174,7 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 
 ---
 
-## 12) Testing Strategy & CI/CD
+## 12) Testing Strategy & CI/CD ✅
 
 * **Unit:** guardrails, retriever adapters, config loaders.
 * **Integration:** API `/health` and `/query` flows with seeded docs; FAISS/BM25 parity checks.
@@ -184,22 +184,22 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 
 ---
 
-## 13) Deployment Topologies
+## 13) Deployment Topologies 🌍
 
 * **Local (compose):** default; all services on a single host.
-* **Single‑VM (prod‑like):** API behind Nginx/Traefik; MLflow/Neo4j restricted to private network.
-* **Kubernetes (outline):** Deployments (API), StatefulSets (Neo4j), Services, Ingress, Secrets; OTel/Prometheus/Grafana via Helm charts.
+* **Single‑VM (prod‑like) 🖥️:** API behind Nginx/Traefik; MLflow/Neo4j restricted to private network.
+* **Kubernetes (outline) ☸️:** Deployments (API), StatefulSets (Neo4j), Services, Ingress, Secrets; OTel/Prometheus/Grafana via Helm charts.
 
 ---
 
-## 14) SLOs & Dashboards
+## 14) SLOs & Dashboards 📊
 
 * **SLO examples:** P95 latency < 500 ms; error rate < 1%; availability > 99.9%.
 * **Grafana panels:** API throughput, P50/P95 `rag_latency_ms`, error budget burn, A/B variant comparison, RAGAS score trend (from MLflow export).
 
 ---
 
-## 15) ADR Index (Architecture Decision Records)
+## 15) ADR Index (Architecture Decision Records) 📘
 
 * **ADR‑001:** Provider‑agnostic generator stub to keep the core vendor‑neutral.
 * **ADR‑002:** Two‑track retrieval (BM25 + Dense) for A/B clarity and coverage.
@@ -208,7 +208,7 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 
 ---
 
-## 16) Glossary
+## 16) Glossary 📖
 
 * **RAG:** Retrieval‑Augmented Generation – LLM answers grounded in retrieved context.
 * **BM25:** Probabilistic lexical ranking function for term matching.
@@ -217,4 +217,3 @@ API -> Client (JSON: answer, variant, k, hits, latency_ms)
 * **Jaeger/Prometheus/Grafana:** Tracing backend / metrics store / dashboards.
 * **MLflow/RAGAS:** Experiment tracking / RAG evaluation metrics.
 * **Neo4j/RDF:** Property graph database / semantic web data model.
-
