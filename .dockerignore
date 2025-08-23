@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.mlflow/
+data/*
+!data/sample_docs/**
+.git
+.gitignore
+.idea
+.vscode
+**/.DS_Store
