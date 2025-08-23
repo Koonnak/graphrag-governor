@@ -1,1 +1,49 @@
+version: "3.9"
+services:
+  api:
+    build: .
+    env_file: .env
+    ports: ["8000:8000"]
+    depends_on: [mlflow, neo4j, otel-collector]
+
+  neo4j:
+    image: neo4j:5.21-community
+    environment:
+      NEO4J_AUTH: neo4j/test
+    ports: ["7474:7474", "7687:7687"]
+    volumes:
+      - neo4j_data:/data
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.15.0
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlflow_artifacts
+    ports: ["5000:5000"]
+    volumes:
+      - mlflow_artifacts:/mlflow_artifacts
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:10.2.3
+    ports: ["3000:3000"]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports: ["16686:16686", "6831:6831/udp"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.106.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+
+volumes:
+  neo4j_data:
+  mlflow_artifacts:
 
