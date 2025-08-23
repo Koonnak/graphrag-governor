@@ -1,5 +1,9 @@
+# --- API & serving ---
 fastapi
 uvicorn[standard]
+gunicorn
+
+# --- RAG / NLP ---
 langgraph
 langchain-core
 sentence-transformers
@@ -12,21 +16,30 @@ pydantic
 python-dotenv
 numpy
 scikit-learn
+
+# --- Tracking & Obs ---
 mlflow
 prometheus-client
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-httpx
 opentelemetry-exporter-otlp
 structlog
+
+# --- Graph / RDF ---
 neo4j
 rdflib
+
+# --- Eval ---
 ragas
 datasets
 evaluate
+
+# --- DevX / Tests ---
 pytest
 pytest-asyncio
+pytest-cov
 black
 ruff
 pre-commit
-
