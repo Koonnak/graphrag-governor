@@ -1,271 +1,298 @@
-# Operations — GraphRAG‑Governor ⚙️
+# RL Auto‑Tuner (PPO) — Roadmap 🔭
 
-> **Purpose:** A practical, end‑to‑end runbook for **non‑technical** and **technical** stakeholders. Covers environments, deployment, scaling, security, backups, SLOs, incident response, and FinOps.
+> **Purpose:** Define a rigorous plan to **automatically tune** GraphRAG‑Governor’s retrieval/generation stack using **Reinforcement Learning (PPO)**. Written for both **non‑technical** and **technical** audiences.
 
 ---
 
 ## 1) Executive Summary (Non‑Technical) 🎯
 
-**What Ops cares about.** We keep the service **available**, **fast**, **safe**, and **observable**. Dashboards show latency and errors; alerts trigger on issues; backups protect data.
+**What it is.** The RL Auto‑Tuner is an **autopilot** that experiments with system settings (e.g., how many passages to retrieve, which retriever to use, whether to re‑rank) and learns which combination gives the **best answers**, **fastest**, at the **lowest cost**.
 
-**What you get.** One‑click local environment, clear health checks, and simple upgrade/rollback procedures. Costs are visible and tunable.
+**Why it matters.**
 
-**Key promises.**
+* **Better quality at lower cost:** Finds a sweet spot automatically, not by manual trial‑and‑error.
+* **Adapts over time:** As content and questions change, the tuner relearns the best configuration.
+* **Safe rollout:** Runs in a **shadow/canary** mode first; only promotes improvements with evidence.
 
-* **Reliability:** Health checks + alerts + tested rollbacks.
-* **Performance:** Watch p95 latency and tune knobs (retrieval variant, top‑K, caches).
-* **Security:** PII masking by default; UIs locked down in production.
-* **Recoverability:** Neo4j/MLflow backups with restore playbooks.
-
----
-
-## 2) Environments & Prerequisites 🧩
-
-* **Local (dev):** Docker Engine/Desktop; Python 3.11 optional.
-* **Prod‑like (single VM):** Docker + reverse proxy (Nginx/Traefik) + systemd units.
-* **Kubernetes:** Ingress, Secrets, persistent volumes; OTel/Prom/Grafana via Helm.
-
-**Ports (defaults)**
-
-* API `8000`, Neo4j `7474/7687`, MLflow `5000`, Jaeger `16686`, Prometheus `9090`, Grafana `3000`, OTel gRPC `4317`.
+**What success looks like.** A dashboard shows a **cost‑quality frontier** improving over releases (higher faithfulness/relevancy for the same or lower cost/latency).
 
 ---
 
-## 3) Bootstrapping (Local) 🚀
+## 2) Problem Statement & Objectives 🧩
 
-```bash
-cp .env.example .env
-# Start full stack
-docker compose up -d --build
-# (Optional) Embed sample docs for dense retrieval demo
-python scripts/bootstrap_index.py
-# Smoke tests
-curl -s http://localhost:8000/health | jq
-curl -s -X POST "http://localhost:8000/query?variant=A&k=6" \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"What privacy guarantees do you provide?"}' | jq
-```
+* **Goal:** Maximize a **multi‑objective reward** combining **quality** (RAGAS faithfulness/relevancy) and **operational signals** (latency, cost), under **safety constraints** (no regressions beyond thresholds).
+* **Decision variables (actions):**
 
-**Makefile shortcuts**
-
-```bash
-make install   # dependencies for local dev
-make test      # pytest quick run
-make up        # compose up -d --build
-make down      # compose down -v
-```
+  * Retrieval **variant**: {A=BM25, B=Dense}
+  * **k** (top‑K): integer within \[3, 32]
+  * **Re‑rank**: on/off (cross‑encoder; roadmap)
+  * **Hybrid fusion weight**: w in \[0, 1] (roadmap)
+  * **Prompt template id**: categorical (roadmap)
 
 ---
 
-## 4) Configuration Management 🔧
+## 3) Formalization (MDP) 📐
 
-* **Environment variables:** see `.env.example`. Configure `SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `NEO4J_*`, `MLFLOW_TRACKING_URI`.
-* **Secrets:** never commit `.env`; use platform Secret Manager (K8s Secrets, AWS/GCP vaults). Rotate keys quarterly.
-* **Config as code:** keep `prometheus.yml` and `otel-collector-config.yaml` under version control; review via PRs.
+* **State** `s_t` (features snapshot):
+
+  * Recent **quality**: rolling means of faithfulness/relevancy
+  * **Latency** stats (p50/p95), **cost** estimate
+  * Current **config** (variant, k, rerank, fusion, prompt)
+  * Corpus/update **metadata** (size, age), question **category**
+* **Action** `a_t`: adjust config `(Δk, toggle rerank, switch variant/template, Δfusion)`
+* **Reward** `r_t` (per batch):
+
+  * `r_t = α·F + β·R − γ·L_hat − δ·C_hat − λ·P`
+  * F = faithfulness, R = relevancy, L\_hat and C\_hat are normalized latency/cost, P is penalties (e.g., policy violations, instability).
+* **Transition:** Apply new config, evaluate on a **validation slice**; observe scores.
+* **Constraints:** Hard gates (minimum F/R), rollback on degradation.
 
 ---
 
-## 5) Deployment Topologies 🌐
+## 4) Algorithm (PPO) 🤖
 
-### 5.1 Single VM (Docker Compose + Reverse Proxy)
+* **Why PPO:** Robust on mixed discrete/continuous actions, stable with KL‑regularization.
+* **Action space:** Mixed (categorical for variant/template; discrete for k; Bernoulli for rerank; continuous for fusion weight).
+* **Policy architecture:** MLP with separate heads per action type; shared encoder on state features.
+* **Key hyperparameters:**
 
-* Terminate **TLS** at Nginx/Traefik.
-* Expose **only** the API; keep MLflow/Neo4j/Prometheus/Grafana behind VPN or basic auth.
-* Run services with `restart: unless-stopped`. Back up volumes (Neo4j, MLflow artifacts).
+  * Rollout horizon: 1 episode = 1 batch evaluation (e.g., 100–500 queries)
+  * gamma (discount): 0.99; lambda (GAE): 0.95
+  * Clip epsilon: 0.2; KL target: 0.01–0.05; entropy bonus for exploration
+  * Learning rate: 1e‑4 (schedule per KL); minibatches: 4–8; epochs: 3–10
+* **Libraries:** Ray RLlib or CleanRL (preferred RLlib for distributed evaluation orchestration).
 
-### 5.2 Kubernetes (Outline)
+---
 
-* **API:** Deployment + Service + Ingress (TLS). Set `readinessProbe` to `/health`.
-* **Stateful:** Neo4j as **StatefulSet** with PersistentVolumeClaims.
-* **Observability:** OTel Collector, Prometheus, Grafana via Helm charts.
-* **Secrets:** OIDC/client keys in K8s Secrets; mount as env.
+## 5) Prerequisites & Sizing 📦
 
-**HPA (example)**
+**Hardware (minimum demo):** 4 vCPU, 8–16 GB RAM.
+**GPU (optional):** speeds up embedding and re‑ranking; batch size 16–64.
+**Traffic:** Evaluations run on *frozen* datasets; live canary gets ≤10% traffic.
+
+**Software:** Python 3.11; RLlib/CleanRL; MLflow; Prometheus/Jaeger; Grafana; Neo4j.
+
+---
+
+## 6) Data & Datasets 🧠
+
+* **Evaluation datasets:** Frozen **validation slice** (representative, versioned). Optional **holdout test** for final checks.
+* **Schema:** `(question: str, gold_contexts: list[str]|None, gold_answer: str|None, category: str, last_updated: date)`
+* **Manifest:** store `dataset_id`, commit hash, size, filters, and timestamp.
+* **Hygiene:** deduplicate, guard against leakage (remove gold answers from retrieval corpus), stratify by category.
+
+**Sample manifest (YAML)**
 
 ```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: graphrag-api
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: graphrag-api
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
+id: acme-policies-v1
+source: s3://datasets/acme/policies
+commit: 9e1c3f0
+size: 2000
+splits:
+  valid: 500
+  test: 500
+meta:
+  categories: [policy, howto, definition]
+  updated_at: 2025-08-01
 ```
 
 ---
 
-## 6) Networking & Security 🔐
+## 7) State Features (Design) 🧾
 
-* **TLS:** terminate at ingress; redirect HTTP→HTTPS.
-* **CORS:** restrict `allow_origins` to trusted domains in production.
-* **AuthN/Z:** add **OIDC SSO** at proxy or app; use **RBAC** to protect admin routes.
-* **Ingress ACLs:** expose API only; block internal dashboards from the public Internet.
-* **Rate limiting:** enforce request and payload size limits at the edge.
-* **PII:** rely on built‑in masking; avoid raw payloads in traces/logs.
+| Feature                  | Type            | Source         | Notes                        |
+| ------------------------ | --------------- | -------------- | ---------------------------- |
+| `F_mean`, `R_mean`       | float           | RAGAS          | Rolling over last N episodes |
+| `lat_p95`, `lat_p50`     | float           | Prometheus     | Normalize by targets         |
+| `cost_usd`               | float           | Token logs     | Optional; per‑request avg    |
+| `variant`, `k`, `rerank` | categorical/int | Config         | One‑hot/embedding            |
+| `fusion_w`               | float           | Config         | \[0,1] clipped               |
+| `category`               | categorical     | Dataset        | One‑hot/embedding            |
+| `corpus_age_days`        | float           | Index metadata | Clamp to max                 |
 
----
-
-## 7) Scaling & Performance 🏎️
-
-* **Gunicorn workers:** start with `workers = 2 * CPU + 1` (tune for I/O vs CPU bound).
-* **Top‑K:** lower `k` for latency; raise for recall. Typical `k = 4–12`.
-* **Retrieval variant:**
-
-  * **A (BM25)** for keyword‑heavy queries.
-  * **B (Dense/FAISS)** for semantic queries.
-* **Caching (optional):** Redis for embeddings and answers; target 30–60% hit ratio.
-* **Batching:** batch LLM or embedding calls when provider is enabled.
-
-**Load test tips**
-
-* Use k6/Locust; ramp to realistic QPS; watch `rag_latency_ms` p95/p99.
-* Compare variant A/B under identical load; tune `k` and caches.
+**Normalization:** robust scaling; clip to \[−3σ, +3σ].
 
 ---
 
-## 8) Observability Playbook 📈
+## 8) Reward & Constraints (Details) 🧮
 
-* **Dashboards:** latency P50/P95, throughput, error rate, A/B comparison, evaluation trend (from MLflow).
-* **Traces:** `http_query → retrieve → gather_contexts → generate`. Attribute `variant`, `k`, `latency_ms`.
-* **Alerts (examples):** p95 > 500ms for 10m; error rate > 1% for 10m (see `docs/OBSERVABILITY.md`).
-* **Log correlation:** propagate `traceparent` / `X‑Request‑ID` to logs.
+**Scaling:**
+
+* `L_hat = min(latency / T_l, 2.0)`
+* `C_hat = min(cost / C_ref, 2.0)` (if cost available)
+
+**Penalty P:**
+
+* Policy violation (PII leak, toxicity) → +1.0
+* Instability (std of scores above band) → +0.5
+
+**Gates (hard):**
+
+* `faithfulness ≥ 0.75` AND `relevancy ≥ 0.75`
+* `p95_latency ≤ 500 ms`; error rate < 1%
+
+**Ablations to run:** reward weights sweep; remove each feature head; discrete vs. continuous action formulations.
 
 ---
 
-## 9) Backups & Disaster Recovery 🧯
+## 9) Training Modes 🏋️
 
-**Neo4j**
+* **Offline (stage 1):** Replay **historical logs** / synthetic workloads. Fast iterations without user traffic.
+* **Shadow (stage 2):** Run tuned configs in **shadow** alongside prod; compare on mirrored queries.
+* **Canary (stage 3):** Route small traffic % (e.g., 5–10%) to the new policy; promote on success.
 
-```bash
-# Backup (stop writes first in prod)
-docker exec -it <neo4j_container> neo4j-admin database dump neo4j --to-path=/backups
-# Restore (new instance)
-docker exec -it <neo4j_container> neo4j-admin database load neo4j --from-path=/backups --force
+**Promotion criteria:**
+
+* Reward up with **95% CI** showing improvement
+* No constraint violations for N consecutive batches
+* Error budget (SLOs) respected
+
+---
+
+## 10) Orchestration & Infra 🧱
+
+* **Workers:** API pods for evaluation traffic; **queue** + **rate limiter** to avoid overload.
+* **Coordinator:** RLlib Trainer managing rollouts and policy updates.
+* **Storage:** MLflow for runs/artifacts; object store for large predictions; Prometheus for live metrics.
+* **Configs as code:** YAML policy config (bounds, thresholds, reward weights). Checked‑in under `configs/rl/`.
+
+**Example policy config (YAML)**
+
+```yaml
+policy:
+  bounds:
+    k: {min: 3, max: 32}
+    fusion_weight: {min: 0.0, max: 1.0}
+  discrete:
+    variant: [A, B]
+    rerank: [off, on]
+  thresholds:
+    faithfulness: 0.75
+    relevancy: 0.75
+    p95_latency_ms: 500
+  reward_weights:
+    alpha: 0.5   # faithfulness
+    beta: 0.5    # relevancy
+    gamma: 0.2   # latency (penalty)
+    delta: 0.2   # cost (penalty)
+    lambda: 1.0  # policy/safety penalty multiplier
 ```
 
-**MLflow**
+---
 
-* Artifacts: store on object storage (S3/GCS/Azure Blob) in prod; version runs.
-* DB/backend: snapshot according to policy (daily/hourly).
+## 11) API & Code Interfaces 🔌
 
-**Prometheus/Jaeger**
+* **Internal service (suggested):** `POST /tuner/evaluate` — run a batch on a given config; returns F/R/latency/cost.
+* **Artifacts:** Store `predictions.jsonl`, `contexts.jsonl`, summary CSV/plots.
+* **MLflow schema:**
 
-* Configure retention windows; export snapshots before upgrades.
+  * **Experiment:** `rl_autotuner`
+  * **Run params:** variant, k, rerank, fusion\_weight, prompt\_id, dataset\_id, seed
+  * **Metrics:** faithfulness, relevancy, p95\_latency, cost\_usd, reward
 
-**RPO/RTO targets (examples)**
+**Reward helper (pseudo‑code)**
 
-* **RPO:** ≤ 24h (daily backups).
-* **RTO:** ≤ 2h (tested restore automation).
-
-**Backup verification**
-
-* Monthly restore tests in a staging environment; record timing and outcomes.
+```python
+def compute_reward(F, R, lat_ms, cost_usd, gates, w):
+    L = min(lat_ms / gates.p95_latency_ms, 2.0)   # normalize & cap
+    C = min(cost_usd / (getattr(gates, 'cost_ref', 1.0)), 2.0)
+    penalty = 0.0
+    if F < gates.faithfulness or R < gates.relevancy:
+        penalty += 1.0
+    return w.alpha*F + w.beta*R - w.gamma*L - w.delta*C - w.lmbda*penalty
+```
 
 ---
 
-## 10) Release Management 🚢
+## 12) Statistics & OPE (Offline Policy Eval) 📊
 
-* **Versioning:** Semantic versions (e.g., `v1.3.0`). Tag Docker images accordingly.
-* **CI gates:** Ruff + Black + mypy + pytest must pass on PRs.
-* **Staging → Prod:** Require A/B results on frozen validation slice; approver sign‑off.
-* **Rollback:** keep N‑1 image; simple `docker compose` or K8s rollout undo.
-
----
-
-## 11) Incident Response 🛎️
-
-**Triage checklist**
-
-* Is the API alive? `GET /health` (status 200).
-* Are error rates rising? Grafana + Prometheus alerts.
-* Trace a failing request in Jaeger; identify slow span.
-* Check Neo4j/MLflow container logs; verify disk/CPU.
-
-**Common issues & fixes**
-
-* **High latency:** lower `k`, scale API, pre‑warm caches, inspect retriever.
-* **5xx errors:** check provider quotas/timeouts (if LLM enabled); look for bad env vars.
-* **No telemetry:** validate OTel Collector/ports; fall back to no‑op is expected.
-
-**Post‑mortem**
-
-* Document root cause, impact window, action items; link dashboards and traces.
+* **Design:** within‑subject A/B; fixed seed; mirrored order.
+* **CIs:** bootstrap 10k resamples; report mean delta and 95% CI.
+* **Sequential testing:** use spending functions or fixed horizons to avoid peeking bias.
+* **OPE:** Inverse Propensity Scoring (IPS), Doubly Robust (DR) when logged propensities are available.
+* **Power analysis:** estimate required N to detect delta=+0.03 in faithfulness at 80% power.
 
 ---
 
-## 12) Data Retention & Compliance 🗄️
+## 13) Canary Runbook 🦜
 
-* **PII:** masked by default; log redaction policies enforced.
-* **Telemetry:** set Prometheus/Jaeger retention per policy (e.g., 7–30 days).
-* **MLflow:** keep experiments ≥ 90 days (or per domain policy); archive old runs.
-* **Access:** restrict dashboard UIs; SSO where possible.
+1. Enable shadow mode; compare reward and gates for 3–5 episodes.
+2. Promote to **5%** canary; add **burn‑rate** alerts (latency p95, error rate).
+3. If green for 24–48h, increase to **25%**.
+4. Full rollout when frontier improvement is stable and no SLO breach.
 
----
-
-## 13) FinOps 💸
-
-* **Cost telemetry:** add token counters and emit `rag_cost_usd` (see roadmap).
-* **Right‑size:** scale to zero off‑hours (dev); use HPA in prod.
-* **Cache first:** aggressive caching can reduce cost/latency 30–60%.
-* **Storage:** move MLflow artifacts to cheap object storage; set lifecycle rules.
+**Rollback policy:** immediate rollback on gate breach or burn‑rate alert; freeze policy and open incident.
 
 ---
 
-## 14) Maintenance Tasks 🧹
+## 14) Governance & Compliance 🛡️
 
-* Rotate keys/secrets quarterly.
-* Prune Docker images/volumes; upgrade base image monthly.
-* Rebuild FAISS indexes after large corpus changes.
-* Validate backups; test restore monthly.
-* Review alerts for noise; tune thresholds quarterly.
+* **Audit trail:** MLflow artifacts include policy config, dataset manifest, code commit.
+* **Ethics:** penalize toxicity/PII leaks in reward; add human spot‑checks on flagged items.
+* **Data retention:** align with org policy (e.g., 90‑day MLflow, 14–30 day telemetry).
 
 ---
 
-## 15) Checklists ✅
+## 15) Risks & Mitigations ⚠️
 
-**Go‑Live**
-
-* [ ] TLS enabled; API behind ingress
-* [ ] AuthN/Z configured (OIDC + RBAC)
-* [ ] Dashboards and alerts verified
-* [ ] Backups running & tested
-* [ ] Error budget & SLOs agreed
-
-**Upgrade**
-
-* [ ] Release notes reviewed
-* [ ] Backup/snapshot taken
-* [ ] Deploy to staging; A/B checks pass
-* [ ] Promote to prod; monitor p95 & errors
-* [ ] Rollback plan ready
-
-**DR Drill**
-
-* [ ] Restore Neo4j snapshot in staging
-* [ ] Restore MLflow artifacts/DB
-* [ ] Verify API runs end‑to‑end
+* **Overfitting to the validation slice:** Rotate slices; cross‑validate; add temporal splits.
+* **Instability / oscillation:** Conservative step sizes; KL control; early stopping.
+* **Metric gaming:** Use multi‑metric reward; spot‑check with human review.
+* **Cost spikes:** Budget guards; cap per‑episode cost; rate limit.
 
 ---
 
-## 16) Appendices 📎
+## 16) Deliverables & Milestones 📅
 
-**Default demo creds** (change in prod!)
+1. **Spec & scaffolding** (this doc + config schema) ✅
+2. **Offline simulator** with log‑replay and reward function ✅/🔜
+3. **Shadow evaluator** service + MLflow logging 🔜
+4. **PPO trainer** (RLlib) with mixed action space 🔜
+5. **Canary rollout** with promotion gate 🔜
+6. **Report**: Pareto frontier vs. manual baselines, ablations 🔜
 
-* Neo4j: `neo4j/test`
+**Success criteria**
 
-**References**
+* ≥ **+5–10%** reward vs. static baseline across 3 datasets
+* No constraint violations; SLOs met
 
-* `docs/OBSERVABILITY.md` — metrics, tracing, alerts
-* `docs/SECURITY_GDPR.md` — security & compliance
-* `docs/ARCHITECTURE.md` — component model
+---
+
+## 17) Dashboards for RL 📈
+
+* **Policy performance:** reward per episode, moving average, gate breaches.
+* **Quality vs. Cost:** scatter plot with Pareto frontier overlay.
+* **Variant breakdown:** share of actions (A/B, rerank on/off) and their conditional returns.
+* **Latency distribution:** p50/p95 by episode; overlays for canary vs. baseline.
+
+---
+
+## 18) Implementation Blueprint 🏗️
+
+**Repo layout (additions):**
+
+```
+src/rl/
+  __init__.py
+  features.py        # state feature builders
+  reward.py          # reward + penalties
+  trainer.py         # PPO loop (RLlib)
+  policy_config.py   # YAML load/validate
+  evaluators/
+    offline.py       # log replay
+    shadow.py        # mirrored traffic
+    canary.py        # % traffic routing
+configs/rl/
+  policy.defaults.yaml
+```
+
+**Open items:** CI job for offline simulator; nightly run on staging; export Grafana panels.
+
+---
+
+## 19) Glossary 📖
+
+* **PPO:** Proximal Policy Optimization — policy‑gradient RL with clipped objective.
+* **Episode:** One evaluation cycle (batch of queries).
+* **Policy:** Mapping from state features to an action (configuration change).
+* **Pareto frontier:** Set of non‑dominated configs balancing quality vs. cost/latency.
