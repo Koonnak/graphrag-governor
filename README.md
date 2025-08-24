@@ -93,7 +93,6 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 * 📈 **Observability:** [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md)
 * ⚙️ **Operations:** [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 * 🧪 **Evaluation:** [`docs/EVALUATION.md`](docs/EVALUATION.md)
-* 🔐 **Security & GDPR:** [`docs/SECURITY_GDPR.md`](docs/SECURITY_GDPR.md)
 * 🔭 **RL Auto‑Tuner (PPO) Roadmap:** [`docs/ROADMAP_RL_AUTOTUNER.md`](docs/ROADMAP_RL_AUTOTUNER.md)
 
 ---
