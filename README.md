@@ -3,11 +3,13 @@
 > **Production‑grade Graph‑augmented RAG control plane** for reliable answers over your documents — with observability (OTel → Prometheus/Grafana/Jaeger), evaluation (RAGAS + MLflow), GDPR guardrails, and A/B testing. **Roadmap:** RL Auto‑Tuner (PPO) to optimize **cost ↔ quality ↔ latency**.
 
 <p align="center">
-  <!-- Replace YOUR-ORG/YOUR-REPO after pushing to GitHub -->
-  <a href="[https://github.com/YOUR-ORG/YOUR-REPO/actions/workflows/ci.yml](https://github.com/Koonnak/graphrag-kg-CICD.git)"><img alt="CI" src="[https://img.shields.io/github/actions/workflow/status/YOUR-ORG/YOUR-REPO/ci.yml?label=CI&logo=github](https://github.com/Koonnak/graphrag-kg-CICD.git)" /></a>
+  <a href="https://github.com/Koonnak/graphrag-kg-CICD/actions/workflows/ci.yml">
+    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Koonnak/graphrag-kg-CICD/ci.yml?branch=main&label=CI&logo=github" />
+  </a>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.11-blue" />
   <img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-green" />
 </p>
+
 
 ---
 
