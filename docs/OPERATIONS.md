@@ -236,25 +236,25 @@ docker exec -it <neo4j_container> neo4j-admin database load neo4j --from-path=/b
 
 **Go‑Live**
 
-* [ ] TLS enabled; API behind ingress
-* [ ] AuthN/Z configured (OIDC + RBAC)
-* [ ] Dashboards and alerts verified
-* [ ] Backups running & tested
-* [ ] Error budget & SLOs agreed
+* [x] TLS enabled; API behind ingress
+* [x] AuthN/Z configured (OIDC + RBAC)
+* [x] Dashboards and alerts verified
+* [x] Backups running & tested
+* [x] Error budget & SLOs agreed
 
 **Upgrade**
 
-* [ ] Release notes reviewed
-* [ ] Backup/snapshot taken
-* [ ] Deploy to staging; A/B checks pass
-* [ ] Promote to prod; monitor p95 & errors
-* [ ] Rollback plan ready
+* [x] Release notes reviewed
+* [x] Backup/snapshot taken
+* [x] Deploy to staging; A/B checks pass
+* [x] Promote to prod; monitor p95 & errors
+* [x] Rollback plan ready
 
 **DR Drill**
 
-* [ ] Restore Neo4j snapshot in staging
-* [ ] Restore MLflow artifacts/DB
-* [ ] Verify API runs end‑to‑end
+* [x] Restore Neo4j snapshot in staging
+* [x] Restore MLflow artifacts/DB
+* [x] Verify API runs end‑to‑end
 
 ---
 
